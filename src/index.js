@@ -283,6 +283,7 @@ export default class Etcd3Client extends EventEmitter {
       .then((watcher) => {
         watcher
           .on('disconnected', () => logger.info('etcd watcher disconnected', { key }))
+          .on('error', error => logger.warn('etcd watcher error', error))
           .on('connected', () => logger.info('etcd watcher connected', { key }));
         return watcher;
       });
