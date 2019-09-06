@@ -27,6 +27,14 @@ async function delay(ms) {
   return new Promise(accept => setTimeout(accept, ms));
 }
 
+async function executeUpToTime(func, maxTimeMs) {
+  if (maxTimeMs <= 0) {
+    return func();
+  }
+  const usefulError = new Error('Function timed out');
+  return Promise.race([func(), new Promise((accept, reject) => setTimeout(() => reject(usefulError), maxTimeMs))]);
+}
+
 export default class Etcd3Client extends EventEmitter {
   constructor(context, opts) {
     super();
@@ -179,8 +187,7 @@ export default class Etcd3Client extends EventEmitter {
     logger.info('etcd acquire', { key });
     this.emit('start', callInfo);
 
-    const lock = this.etcd.lock(key);
-    lock.ttl(timeout);
+    const lock = this.etcd.lock(key).ttl(timeout);
     lock[LOGGER] = { logger, key };
 
     const startTime = Date.now();
@@ -230,7 +237,7 @@ export default class Etcd3Client extends EventEmitter {
    * For example: when making a critical area idempotent.
    * Even if you think you need it consult #guild-server-devs first.
    */
-  async memoize(context, key, func, ttl = 60 * 5, timeout = 10, maxWait = 30) {
+  async memoize(context, key, func, ttl = 60 * 5, timeout = 10, maxWait = 30, maxExecutionTime = 0) {
     const callInfo = {
       client: this,
       context,
@@ -242,6 +249,7 @@ export default class Etcd3Client extends EventEmitter {
     logger.info('etcd memoize', { key });
     this.emit('start', callInfo);
 
+    let lock;
     let value;
     let fnError;
     const lockKey = `${key}-lock`;
@@ -252,34 +260,33 @@ export default class Etcd3Client extends EventEmitter {
       if (value) {
         this.finishCall(callInfo, 'val-prelock');
       } else {
-        const lock = this.acquireLock(context, lockKey, timeout, maxWait);
-        await lock.do(async () => {
-          value = await this.get(context, valueKey);
-          if (value) {
-            this.finishCall(callInfo, 'val-postlock');
-          } else {
-            logger.info('etcd memoize exec', { key });
-            try {
-              value = await func();
-            } catch (error) {
-              fnError = error;
-              logger.error('etcd memoize fn fail', error);
-              this.finishCall(callInfo, 'fn-error');
-              throw error;
-            }
-            if (ttl !== 0) {
-              await this.put(context, valueKey, value, ttl);
-            }
-            this.finishCall(callInfo, 'val-eval');
+        lock = await this.acquireLock(context, lockKey, timeout, maxWait);
+        value = await this.get(context, valueKey);
+        if (value) {
+          this.finishCall(callInfo, 'val-postlock');
+        } else {
+          logger.info('etcd memoize exec', { key });
+          try {
+            await executeUpToTime(func, maxExecutionTime * 1000);
+            value = await func();
+          } catch (error) {
+            fnError = true;
+            throw error;
           }
-        });
+          if (ttl !== 0) {
+            await this.put(context, valueKey, value, ttl);
+          }
+          this.finishCall(callInfo, 'val-eval');
+        }
       }
     } catch (error) {
-      if (!fnError) {
-        logger.error('etcd memoize fail', error);
-        this.finishCall(callInfo, 'error');
-      }
+      logger.error(fnError ? 'etcd memoize fn failed' : 'etcd memoize failed', error);
+      this.finishCall(callInfo, fnError ? 'fn-error' : 'error');
       throw error;
+    } finally {
+      if (lock) {
+        this.releaseLock(lock);
+      }
     }
 
     return value;
