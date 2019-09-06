@@ -8,8 +8,7 @@
     "test-some": "tap --node-arg=-r --node-arg=@babel/register",
     "cover": "nyc --reporter=lcov npm test",
     "lint": "eslint .",
-    "build": "babel src --out-dir build",
-    "prepublish": "npm run build"
+    "build": "babel src --out-dir build"
   },
   "repository": {
     "type": "git",
