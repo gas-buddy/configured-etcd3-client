@@ -11,16 +11,14 @@ function statusCode(error) {
 
 const LOGGER = Symbol('Logger property for locks');
 
-function unpackJson(node, prefix = '', hash = {}) {
-  const { key, nodes, value } = node;
-  const keyPart = key.substring(prefix.length).replace(/^\//, '');
-  if (value) {
-    hash[keyPart] = JSON.parse(value);
-  } else {
-    hash[keyPart] = {};
-    nodes.forEach(subnode => unpackJson(subnode, key, hash[keyPart]));
-  }
-  return hash;
+// This is a bit of a throwback to the etcd2 data model, and it only supports one "level" deep,
+// but that's useful enough to keep for us...
+function unpackJson(node, prefix = '') {
+  return Object.entries(node).reduce((acc, [key, value]) => {
+    const keyPart = key.substring(prefix.length).replace(/^\//, '');
+    acc[keyPart] = value ? JSON.parse(value) : value;
+    return acc;
+  }, {});
 }
 
 async function delay(ms) {
@@ -69,16 +67,6 @@ export default class Etcd3Client extends EventEmitter {
     this.emit('finish', { status, ...callInfo });
   }
 
-  getOptions(baseOptions) {
-    if (!baseOptions) {
-      return { maxRetries: this.maxRetries };
-    }
-    return {
-      maxRetries: this.maxRetries,
-      ...baseOptions,
-    };
-  }
-
   async get(context, key, options) {
     const callInfo = {
       client: this,
@@ -91,27 +79,20 @@ export default class Etcd3Client extends EventEmitter {
     this.emit('start', callInfo);
 
     try {
-      const value = await this.etcd.get(key);
+      const value = await (options?.recursive ? this.etcd.getAll().prefix(key) : this.etcd.get(key));
       this.finishCall(callInfo, 0);
       if (!value) {
         logger.info('etcd get empty', { key });
         return value;
       }
       logger.info('etcd get ok', { key });
-      return options?.recursive ? unpackJson(value) : JSON.parse(value);
+      return options?.recursive ? unpackJson(value, key) : JSON.parse(value);
     } catch (error) {
       const code = statusCode(error);
       logger.info('etcd get failed', { key, code });
       this.finishCall(callInfo, code);
       throw error;
     }
-  }
-
-  set(context, key, value, ttlOrOptions) {
-    const options = (ttlOrOptions && typeof ttlOrOptions !== 'object') ? { ttl: ttlOrOptions } : ttlOrOptions;
-    const logger = context.gb?.logger || this.baseLogger;
-    logger.error('*** UPDATE YOUR ETCD CALL TO USE put NOT set ***');
-    return this.put(context, key, value, options?.ttl);
   }
 
   /**
@@ -290,5 +271,20 @@ export default class Etcd3Client extends EventEmitter {
     }
 
     return value;
+  }
+
+  async watcher(context, key) {
+    const logger = context.gb?.logger || this.baseLogger;
+    logger.info('Starting etcd watch', { key });
+
+    return this.etcd.watch()
+      .key(key)
+      .create()
+      .then(watcher => {
+        watcher
+          .on('disconnected', () => logger.info('etcd watcher disconnected', { key }))
+          .on('connected', () => logger.info('etcd watcher connected', { key }));
+        return watcher;
+      });
   }
 }
