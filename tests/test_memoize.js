@@ -48,4 +48,10 @@ tap.test('test_memoize', async (t) => {
   const memo2 = client.memoize(context, key2, delayFunc2, 0);
   t.strictEquals(await memo1, 'old value', 'Should get the old value the first time');
   t.strictEquals(await memo2, 'new value', 'Should get the new value the second time');
+
+  const key3 = `clear-${uuidv4()}`;
+  await client.memoize(context, key3, () => 42, 30);
+  t.strictEquals(await client.memoize(context, key3, () => 0, 30), 42, 'Should get the original value');
+  await client.clearMemoizedValue(context, key3);
+  t.strictEquals(await client.memoize(context, key3, () => 1, 30), 1, 'Should get the new value');
 });

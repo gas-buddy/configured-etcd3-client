@@ -273,6 +273,10 @@ export default class Etcd3Client extends EventEmitter {
     return value;
   }
 
+  async clearMemoizedValue(context, key) {
+    return this.del(context, `${key}-value`);
+  }
+
   async watcher(context, key) {
     const logger = context.gb?.logger || this.baseLogger;
     logger.info('Starting etcd watch', { key });
