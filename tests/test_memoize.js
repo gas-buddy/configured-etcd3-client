@@ -1,6 +1,6 @@
 import tap from 'tap';
 import pino from 'pino';
-import uuidv4 from 'uuid/v4';
+import { v4 as uuidv4 } from 'uuid';
 import EtcdClient from '../src/index';
 
 const logger = pino();
