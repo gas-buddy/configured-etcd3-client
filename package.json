@@ -1,6 +1,6 @@
 {
   "name": "@gasbuddy/configured-etcd3-client",
-  "version": "1.1.1",
+  "version": "2.0.0",
   "description": "A configuration driven etcd3 client",
   "main": "build/index.js",
   "scripts": {
@@ -29,7 +29,7 @@
     "tap": "^14.10.7"
   },
   "dependencies": {
-    "etcd3": "^0.2.13",
+    "etcd3": "^1.1.0",
     "uuid": "^8.0.0"
   }
 }
