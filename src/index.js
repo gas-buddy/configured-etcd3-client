@@ -248,8 +248,7 @@ export default class Etcd3Client extends EventEmitter {
         } else {
           logger.info('etcd memoize exec', { key });
           try {
-            await executeUpToTime(func, maxExecutionTime * 1000);
-            value = await func();
+            value = await executeUpToTime(func, maxExecutionTime * 1000);
           } catch (error) {
             fnError = true;
             throw error;
