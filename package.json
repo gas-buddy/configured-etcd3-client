@@ -3,9 +3,6 @@
   "version": "2.0.0",
   "description": "A configuration driven etcd3 client",
   "main": "build/index.js",
-  "engines": {
-    "node": ">=0.10.3 <15"
-  },
   "scripts": {
     "test": "tap --node-arg=-r --node-arg=@babel/register tests/*.js",
     "test-some": "tap --node-arg=-r --node-arg=@babel/register",
