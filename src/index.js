@@ -134,7 +134,7 @@ export default class Etcd3Client extends EventEmitter {
     }
   }
 
-  async del(context, key) {
+  async del(context, key, options) {
     const callInfo = {
       client: this,
       context,
@@ -146,7 +146,12 @@ export default class Etcd3Client extends EventEmitter {
     this.emit('start', callInfo);
 
     try {
-      await this.etcd.delete().key(key);
+      const builder = this.etcd.delete();
+      if (options?.recursive) {
+        await builder.prefix(key);
+      } else {
+        await builder.key(key);
+      }
       this.finishCall(callInfo, 0);
       logger.info('etcd del ok', { key });
     } catch (error) {
